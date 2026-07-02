@@ -10,6 +10,9 @@ Events,
 AttachmentBuilder
 } = require('discord.js');
 
+const { QuickDB } = require("quick.db");
+const db = new QuickDB();
+
 const client = new Client({
 intents: [
 GatewayIntentBits.Guilds,
@@ -38,7 +41,7 @@ const spaceQuestions = [
 { question: 'What planet is known as the blue planet?', answer: 'earth' }
 ];
 
-// ===== RANDOM SPACE QUESTION (NO REPEAT) =====
+// ===== RANDOM SPACE QUESTION =====
 function getRandomSpaceQuestion(usedQuestions) {
 
 const available = spaceQuestions.filter(
@@ -53,7 +56,7 @@ usedQuestions.push(random.question);
 return random;
 }
 
-// ===== RANDOM CREATURE (NO REPEAT) =====
+// ===== RANDOM CREATURE =====
 function getRandomCreature(usedCreatures) {
 
 const available = creatures.filter(
@@ -150,7 +153,7 @@ answer: ans.toString()
 }
 
 // ===== READY =====
-client.once('ready', () => {
+client.once('clientReady', () => {
 console.log(`${client.user.tag} is online!`);
 });
 
@@ -211,6 +214,77 @@ client.on('messageCreate', async message => {
 
 if (message.author.bot) return;
 
+// ===== TOP =====
+
+if (message.content.toLowerCase() === "top") {
+
+const all = await db.all();
+
+const pointsData = all.filter(data =>
+data.id.startsWith("points_")
+);
+
+if (pointsData.length <= 0) {
+return message.reply("❌ No players found.");
+}
+
+const sorted = pointsData.sort((a, b) => b.value - a.value);
+
+let text = "🏆 TOP PLAYERS\n\n";
+
+for (let i = 0; i < Math.min(sorted.length, 10); i++) {
+
+const userId = sorted[i].id.replace("points_", "");
+const points = sorted[i].value;
+
+let medal = "🎖";
+
+if (points >= 1000) medal = "🥇";
+else if (points >= 500) medal = "🥈";
+else if (points >= 210) medal = "🥉";
+
+let user;
+
+try {
+user = await client.users.fetch(userId);
+} catch {
+user = { username: "Unknown" };
+}
+
+text += `${medal} ${user.username} - ${points}\n`;
+}
+
+return message.reply(text);
+}
+
+// ===== PROFILE =====
+
+if (message.content.toLowerCase() === "profile") {
+
+const points =
+await db.get(`points_${message.author.id}`) || 0;
+
+let rank = "No Rank";
+
+if (points >= 1000) {
+rank = "🥇";
+}
+else if (points >= 500) {
+rank = "🥈";
+}
+else if (points >= 210) {
+rank = "🥉";
+}
+
+return message.reply(`
+👤 ${message.author.username}
+
+${rank} Rank
+
+💎 Points: ${points}
+`);
+}
+
 if (!activeGames.has(message.author.id)) return;
 
 const game = activeGames.get(message.author.id);
@@ -219,8 +293,29 @@ if (
 message.content.toLowerCase() !==
 game.answer.toLowerCase()
 ) {
-return message.reply('❌ Wrong answer! Try again.');
+
+let points =
+await db.get(`points_${message.author.id}`) || 0;
+
+points -= 3;
+
+if (points < 0) points = 0;
+
+await db.set(`points_${message.author.id}`, points);
+
+return message.reply(
+`❌ Wrong answer!\n\n-3 Points\n\n💎 Total Points: ${points}`
+);
 }
+
+// ===== CORRECT ANSWER =====
+
+let points =
+await db.get(`points_${message.author.id}`) || 0;
+
+points += 10;
+
+await db.set(`points_${message.author.id}`, points);
 
 // ===== LEVEL 1 =====
 if (game.level === 1) {
@@ -237,7 +332,7 @@ getRandomSpaceQuestion(game.usedSpaceQuestions);
 game.answer = q.answer;
 
 return message.reply(
-`✅ LEVEL 1 COMPLETE!\n\n🌌 LEVEL 2 - SPACE\n\nQuestion 1/7\n\n${q.question}`
+`✅ LEVEL 1 COMPLETE!\n\n+10 Points\n💎 Total Points: ${points}\n\n🌌 LEVEL 2 - SPACE\n\nQuestion 1/7\n\n${q.question}`
 );
 }
 
@@ -246,7 +341,7 @@ const math = generateMathQuestion();
 game.answer = math.answer;
 
 return message.reply(
-`✅ Correct!\n\n📚 Question ${game.score + 1}/7\n\n${math.question} = ?`
+`✅ Correct!\n\n+10 Points\n💎 Total Points: ${points}\n\n📚 Question ${game.score + 1}/7\n\n${math.question} = ?`
 );
 }
 
@@ -264,7 +359,7 @@ const eq = generateEquation();
 game.answer = eq.answer;
 
 return message.reply(
-`🔥 LEVEL 3 - EQUATIONS\n\n📘 Question 1/4\n\n${eq.question}`
+`🔥 LEVEL 3 - EQUATIONS\n\n+10 Points\n💎 Total Points: ${points}\n\n📘 Question 1/4\n\n${eq.question}`
 );
 }
 
@@ -274,7 +369,7 @@ getRandomSpaceQuestion(game.usedSpaceQuestions);
 game.answer = q.answer;
 
 return message.reply(
-`✅ Correct!\n\n🌌 Question ${game.spaceScore + 1}/7\n\n${q.question}`
+`✅ Correct!\n\n+10 Points\n💎 Total Points: ${points}\n\n🌌 Question ${game.spaceScore + 1}/7\n\n${q.question}`
 );
 }
 
@@ -294,7 +389,7 @@ game.answer = c.name;
 
 return message.reply({
 content:
-`🔥 LEVEL 4 - CREATURES\n\n🖼 Creature 1/3\n\nWhat is this creature?`,
+`🔥 LEVEL 4 - CREATURES\n\n+10 Points\n💎 Total Points: ${points}\n\n🖼 Creature 1/3\n\nWhat is this creature?`,
 files: [new AttachmentBuilder(c.file)]
 });
 }
@@ -304,7 +399,7 @@ const eq = generateEquation();
 game.answer = eq.answer;
 
 return message.reply(
-`✅ Correct!\n\n📘 Question ${game.equationScore + 1}/4\n\n${eq.question}`
+`✅ Correct!\n\n+10 Points\n💎 Total Points: ${points}\n\n📘 Question ${game.equationScore + 1}/4\n\n${eq.question}`
 );
 }
 
@@ -318,7 +413,7 @@ if (game.creatureScore >= 3) {
 activeGames.delete(message.author.id);
 
 return message.reply(
-'🏆 GOD LEVEL COMPLETED!'
+`🏆 GOD LEVEL COMPLETED!\n\n+10 Points\n💎 Total Points: ${points}`
 );
 }
 
@@ -329,7 +424,7 @@ game.answer = c.name;
 
 return message.reply({
 content:
-`✅ Correct!\n\n🖼 Creature ${game.creatureScore + 1}/3\n\nWhat is this creature?`,
+`✅ Correct!\n\n+10 Points\n💎 Total Points: ${points}\n\n🖼 Creature ${game.creatureScore + 1}/3\n\nWhat is this creature?`,
 files: [new AttachmentBuilder(c.file)]
 });
 }
